@@ -20,7 +20,7 @@ creds = ServiceAccountCredentials.from_json_keyfile_name(
 client = gspread.authorize(creds)
 
 # Your Google Sheet ID (DO NOT USE CSV LINK)
-SHEET_ID = "1EZ4QJLoLr-KuOdRMFDOXUDYCIYr7qCJ7qVECcCIEMq8"
+SHEET_ID = "17B_nr58UEikILpOip9Bzy87z8IQrF0H_2XA7qXzlNlE"
 
 # Open FIRST sheet ("Sheet1")
 sheet = client.open_by_key(SHEET_ID).sheet1
