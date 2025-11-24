@@ -14,7 +14,7 @@ SCOPE = [
 
 # Load your service account file (must be included in Render project)
 creds = ServiceAccountCredentials.from_json_keyfile_name(
-    "gen-lang-client-0000776926-fae8bb8259b2.json", SCOPE
+    "service_account.json", SCOPE
 )
 
 client = gspread.authorize(creds)
