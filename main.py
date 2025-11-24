@@ -33,11 +33,7 @@ def approve_model():
 
     payload = {
         "run_name": f"approval-{model_name}-v{model_version}",
-        "new_cluster": {
-            "spark_version": "13.3.x-scala2.12",
-            "node_type_id": "Standard_DS3_v2",
-            "autoscale": {"min_workers": 1, "max_workers": 1}
-        },
+        "serverless_compute": {},
         "notebook_task": {
             "notebook_path": "/Shared/model_approval_handler",
             "base_parameters": {
@@ -48,6 +44,7 @@ def approve_model():
             }
         }
     }
+
 
     resp = requests.post(jobs_submit_url, json=payload, headers=headers)
 
