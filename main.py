@@ -2,6 +2,8 @@ from flask import Flask, request, jsonify
 import gspread
 from oauth2client.service_account import ServiceAccountCredentials
 
+import json
+import os
 app = Flask(__name__)
 
 # ------------------------------------------------------
@@ -12,10 +14,16 @@ SCOPE = [
     "https://www.googleapis.com/auth/drive"
 ]
 
-# Load your service account file (must be included in Render project)
+
+SERVICE_ACCOUNT_JSON = os.environ["SERVICE_ACCOUNT_JSON"]
+
+with open("service_account.json", "w") as f:
+    f.write(SERVICE_ACCOUNT_JSON)
+
 creds = ServiceAccountCredentials.from_json_keyfile_name(
     "service_account.json", SCOPE
 )
+
 
 client = gspread.authorize(creds)
 
