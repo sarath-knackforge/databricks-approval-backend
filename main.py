@@ -1,55 +1,69 @@
-
-# # Read settings from env vars (set these on PythonAnywhere)
-# DATABRICKS_HOST = "https://dbc-4c3ee4bb-030f.cloud.databricks.com"  # e.g. https://adb-123456789012345.11.azuredatabricks.net
-# DATABRICKS_PAT = "dapib38c34617e6cd6ffc69a6f80340e7881"   # your dapib... token
-
-
-import os
-import requests
 from flask import Flask, request, jsonify
+import gspread
+from oauth2client.service_account import ServiceAccountCredentials
 
 app = Flask(__name__)
 
-# Read environment variables (set them in wsgi or PA Web settings)
-DATABRICKS_HOST = "https://dbc-4c3ee4bb-030f.cloud.databricks.com"
-PAT = "dapib38c34617e6cd6ffc69a6f80340e7881"
+# ------------------------------------------------------
+# GOOGLE SHEETS API AUTHENTICATION
+# ------------------------------------------------------
+SCOPE = [
+    "https://www.googleapis.com/auth/spreadsheets",
+    "https://www.googleapis.com/auth/drive"
+]
 
-@app.route("/")
-def root():
-    return jsonify({"status": "Flask backend is running"})
+# Load your service account file (must be included in Render project)
+creds = ServiceAccountCredentials.from_json_keyfile_name(
+    "service_account.json", SCOPE
+)
 
-@app.route("/approve-model", methods=["GET"])
-def approve_model():
-    model_name = request.args.get("model_name")
-    model_version = request.args.get("model_version")
-    run_id = request.args.get("run_id")
+client = gspread.authorize(creds)
 
-    if not model_name or not model_version or not run_id:
-        return jsonify({"error": "Missing parameters"}), 400
+# Your Google Sheet ID (DO NOT USE CSV LINK)
+SHEET_ID = "1EZ4QJLoLr-KuOdRMFDOXUDYCIYr7qCJ7qVECcCIEMq8"
 
-    jobs_submit_url = f"{DATABRICKS_HOST}/api/2.1/jobs/runs/submit"
-
-    headers = {"Authorization": f"Bearer {PAT}"}
-
-    payload = {
-        "run_name": f"approval-{model_name}-v{model_version}",
-        "serverless_compute": {},
-        "notebook_task": {
-            "notebook_path": "/Shared/model_approval_handler",
-            "base_parameters": {
-                "model_name": model_name,
-                "model_version": model_version,
-                "run_id": run_id,
-                "decision": "APPROVE"
-            }
-        }
-    }
+# Open FIRST sheet ("Sheet1")
+sheet = client.open_by_key(SHEET_ID).sheet1
 
 
-    resp = requests.post(jobs_submit_url, json=payload, headers=headers)
+# ------------------------------------------------------
+# APPROVAL ENDPOINT
+# ------------------------------------------------------
+@app.get("/approve")
+def approve():
+    try:
+        run_id = request.args.get("run_id")
+        model_name = request.args.get("model_name")
+        model_version = request.args.get("model_version")
 
-    return jsonify({
-        "submitted": True,
-        "databricks_status": resp.status_code,
-        "response": resp.text
-    })
+        if not run_id:
+            return jsonify({"error": "Missing run_id"}), 400
+
+        # Append approval row
+        sheet.append_row([run_id, model_name, model_version, "TRUE"])
+
+        return jsonify({
+            "status": "SUCCESS",
+            "message": "Approval recorded in Google Sheet",
+            "run_id": run_id,
+            "model_name": model_name,
+            "model_version": model_version
+        })
+
+    except Exception as e:
+        return jsonify({"status": "ERROR", "error": str(e)}), 500
+
+
+# ------------------------------------------------------
+# HEALTH CHECK
+# ------------------------------------------------------
+@app.get("/")
+def home():
+    return "Databricks Approval Backend is running!"
+
+
+# ------------------------------------------------------
+# RUN FLASK (Render uses Gunicorn in production)
+# ------------------------------------------------------
+if __name__ == "__main__":
+    app.run(host="0.0.0.0", port=5000)
