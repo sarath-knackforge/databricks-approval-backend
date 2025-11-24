@@ -6,30 +6,27 @@ from oauth2client.service_account import ServiceAccountCredentials
 app = Flask(__name__)
 
 # ------------------------------------------------------
-# GOOGLE SHEETS API AUTHENTICATION (Render-Safe)
+# GOOGLE SHEETS AUTH (Render-Safe)
 # ------------------------------------------------------
 SCOPE = [
     "https://www.googleapis.com/auth/spreadsheets",
     "https://www.googleapis.com/auth/drive"
 ]
 
-# Load service account JSON from environment variable
+# Load JSON secret from Render Environment
 service_json = os.environ.get("SERVICE_ACCOUNT_JSON")
-
 if not service_json:
-    raise Exception("SERVICE_ACCOUNT_JSON not found. Add it in Render → Environment.")
+    raise Exception("SERVICE_ACCOUNT_JSON is missing in Render environment!")
 
-# Write the JSON to a file Render can access
+# Reconstruct JSON to a file for gspread
 with open("service_account.json", "w") as f:
     f.write(service_json)
 
-# Authenticate
-creds = ServiceAccountCredentials.from_json_keyfile_name(
-    "service_account.json", SCOPE
-)
+# Authenticate with Google Sheets
+creds = ServiceAccountCredentials.from_json_keyfile_name("service_account.json", SCOPE)
 client = gspread.authorize(creds)
 
-# Your sheet ID
+# Your Google Sheet ID
 SHEET_ID = "17B_nr58UEikILpOip9Bzy87z8IQrF0H_2XA7qXzlNlE"
 sheet = client.open_by_key(SHEET_ID).sheet1
 
@@ -52,7 +49,7 @@ def approve():
 
         return jsonify({
             "status": "SUCCESS",
-            "message": "Approval recorded successfully.",
+            "message": "Approval recorded.",
             "run_id": run_id,
             "model_name": model_name,
             "model_version": model_version
@@ -71,7 +68,7 @@ def home():
 
 
 # ------------------------------------------------------
-# RUN FLASK (ignored by Render, but useful locally)
+# RUN LOCAL SERVER (Render uses Gunicorn instead)
 # ------------------------------------------------------
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=5000)
