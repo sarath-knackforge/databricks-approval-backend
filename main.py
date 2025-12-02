@@ -1,62 +1,118 @@
 from flask import Flask, request, jsonify
-import os, json
 import gspread
 from oauth2client.service_account import ServiceAccountCredentials
 
 app = Flask(__name__)
 
 # ------------------------------------------------------
-# GOOGLE SHEETS AUTH (Render-Safe)
+# GOOGLE SHEETS API AUTHENTICATION
 # ------------------------------------------------------
 SCOPE = [
     "https://www.googleapis.com/auth/spreadsheets",
     "https://www.googleapis.com/auth/drive"
 ]
 
-# Load JSON secret from Render Environment
-service_json = os.environ.get("SERVICE_ACCOUNT_JSON")
-if not service_json:
-    raise Exception("SERVICE_ACCOUNT_JSON is missing in Render environment!")
+# Load your service account file (must be included in Render project)
+creds = ServiceAccountCredentials.from_json_keyfile_name(
+    "service_account.json", SCOPE
+)
 
-# Reconstruct JSON to a file for gspread
-with open("service_account.json", "w") as f:
-    f.write(service_json)
-
-# Authenticate with Google Sheets
-creds = ServiceAccountCredentials.from_json_keyfile_name("service_account.json", SCOPE)
 client = gspread.authorize(creds)
 
-# Your Google Sheet ID
+# Your Google Sheet ID (DO NOT USE CSV LINK)
 SHEET_ID = "17B_nr58UEikILpOip9Bzy87z8IQrF0H_2XA7qXzlNlE"
+
+# Open FIRST sheet ("Sheet1")
 sheet = client.open_by_key(SHEET_ID).sheet1
 
 
 # ------------------------------------------------------
 # APPROVAL ENDPOINT
 # ------------------------------------------------------
-@app.get("/approve")
-def approve():
-    try:
-        run_id = request.args.get("run_id")
-        model_name = request.args.get("model_name")
-        model_version = request.args.get("model_version")
+# @app.get("/approve")
+# def approve():
+#     try:
+#         run_id = request.args.get("run_id")
+#         model_name = request.args.get("model_name")
+#         model_version = request.args.get("model_version")
 
-        if not run_id:
-            return jsonify({"error": "Missing run_id"}), 400
+#         if not run_id:
+#             return jsonify({"error": "Missing run_id"}), 400
 
-        # Append to Google Sheet
-        sheet.append_row([run_id, model_name, model_version, "TRUE"])
+#         # Append approval row
+#         sheet.append_row([run_id, model_name, model_version, "TRUE"])
+
+#         return jsonify({
+#             "status": "SUCCESS",
+#             "message": "Approval recorded in Google Sheet",
+#             "run_id": run_id,
+#             "model_name": model_name,
+#             "model_version": model_version
+#         })
+
+#     except Exception as e:
+#         return jsonify({"status": "ERROR", "error": str(e)}), 500
+
+from flask import Flask, request, jsonify
+
+app = Flask(__name__)
+
+@app.route("/approve", methods=["GET"])
+def approve_model():
+
+    run_id = request.args.get("run_id")
+    model_name = request.args.get("model_name")
+    model_version = request.args.get("model_version")
+    action = request.args.get("action", "APPROVE")  # default approve
+
+    if not run_id or not model_name or not model_version:
+        return jsonify({
+            "status": "error",
+            "message": "Missing required parameters"
+        }), 400
+
+    if action == "APPROVE":
+        print("✅ MODEL APPROVED")
+        print("Run ID:", run_id)
+        print("Model Name:", model_name)
+        print("Model Version:", model_version)
+
+        # ✅ TODO: Promote model to Production using MLflow
+        # mlflow_client.transition_model_version_stage(...)
 
         return jsonify({
-            "status": "SUCCESS",
-            "message": "Approval recorded.",
+            "status": "success",
+            "action": "APPROVED",
             "run_id": run_id,
             "model_name": model_name,
             "model_version": model_version
         })
 
-    except Exception as e:
-        return jsonify({"status": "ERROR", "error": str(e)}), 500
+    elif action == "REJECT":
+        print("❌ MODEL REJECTED")
+        print("Run ID:", run_id)
+        print("Model Name:", model_name)
+        print("Model Version:", model_version)
+
+        # ✅ TODO: Log rejection reason / audit trail
+
+        return jsonify({
+            "status": "success",
+            "action": "REJECTED",
+            "run_id": run_id,
+            "model_name": model_name,
+            "model_version": model_version
+        })
+
+    else:
+        return jsonify({
+            "status": "error",
+            "message": "Invalid action"
+        }), 400
+
+
+if __name__ == "__main__":
+    app.run(host="0.0.0.0", port=8000)
 
 
 # ------------------------------------------------------
@@ -68,7 +124,7 @@ def home():
 
 
 # ------------------------------------------------------
-# RUN LOCAL SERVER (Render uses Gunicorn instead)
+# RUN FLASK (Render uses Gunicorn in production)
 # ------------------------------------------------------
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=5000)
