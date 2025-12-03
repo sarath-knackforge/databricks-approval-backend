@@ -3,8 +3,22 @@ import gspread
 from oauth2client.service_account import ServiceAccountCredentials
 import os
 import json
+import sqlite3
+from datetime import datetime
 
 app = Flask(__name__)
+
+
+# ===============================
+# SQLITE CONFIG
+# ===============================
+DB_PATH = os.getenv("SQLITE_DB_PATH", "customers.db")
+
+def get_db():
+    conn = sqlite3.connect(DB_PATH)
+    conn.row_factory = sqlite3.Row
+    return conn
+
 
 google_creds_json = os.getenv("SERVICE_ACCOUNT_JSON")  # ✅ MATCHES RENDER
 print("✅ ENV VAR FOUND:", bool(os.getenv("SERVICE_ACCOUNT_JSON")))
@@ -123,7 +137,135 @@ def approve():
         return jsonify({"status": "ERROR", "error": str(e)}), 500
 
 
+# ===============================
+# AUTO CREATE TABLE ON START
+# ===============================
+def init_db():
+    conn = get_db()
+    cur = conn.cursor()
 
+    cur.execute("""
+        CREATE TABLE IF NOT EXISTS customers (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            customer_id TEXT UNIQUE NOT NULL,
+            customer_name TEXT,
+            schema_name TEXT,
+            cloud_provider TEXT,
+            data_path TEXT,
+            is_active INTEGER DEFAULT 1,
+            created_at TEXT
+        )
+    """)
+
+    conn.commit()
+    conn.close()
+
+init_db()
+
+
+# ===============================
+# ✅ CREATE CUSTOMER (POST)
+# ===============================
+@app.post("/customers")
+def create_customer():
+    data = request.json
+
+    required_fields = [
+        "customer_id",
+        "customer_name",
+        "schema_name",
+        "cloud_provider",
+        "data_path"
+    ]
+
+    for field in required_fields:
+        if field not in data:
+            return jsonify({"error": f"Missing field: {field}"}), 400
+
+    try:
+        conn = get_db()
+        cur = conn.cursor()
+
+        cur.execute("""
+            INSERT INTO customers (
+                customer_id,
+                customer_name,
+                schema_name,
+                cloud_provider,
+                data_path,
+                is_active,
+                created_at
+            )
+            VALUES (?, ?, ?, ?, ?, ?, ?)
+        """, (
+            data["customer_id"],
+            data["customer_name"],
+            data["schema_name"],
+            data["cloud_provider"],
+            data["data_path"],
+            int(data.get("is_active", 1)),
+            datetime.utcnow().isoformat()
+        ))
+
+        conn.commit()
+        conn.close()
+
+        return jsonify({
+            "status": "success",
+            "message": "Customer created",
+            "customer_id": data["customer_id"]
+        }), 201
+
+    except sqlite3.IntegrityError:
+        return jsonify({"error": "Customer already exists"}), 409
+
+# ===============================
+# ✅ LIST CUSTOMERS (GET)
+# ===============================
+@app.get("/customers")
+def list_customers():
+    conn = get_db()
+    cur = conn.cursor()
+
+    rows = cur.execute("""
+        SELECT 
+            customer_id,
+            customer_name,
+            schema_name,
+            cloud_provider,
+            data_path,
+            is_active,
+            created_at
+        FROM customers
+        WHERE is_active = 1
+    """).fetchall()
+
+    conn.close()
+
+    customers = [dict(row) for row in rows]
+    return jsonify(customers), 200
+
+# ===============================
+# ✅ SOFT DELETE (OPTIONAL)
+# ===============================
+@app.delete("/customers/<customer_id>")
+def deactivate_customer(customer_id):
+    conn = get_db()
+    cur = conn.cursor()
+
+    cur.execute("""
+        UPDATE customers
+        SET is_active = 0
+        WHERE customer_id = ?
+    """, (customer_id,))
+
+    conn.commit()
+    conn.close()
+
+    return jsonify({
+        "status": "success",
+        "message": f"Customer {customer_id} deactivated"
+    })
 # ------------------------------------------------------
 # HEALTH CHECK
 # ------------------------------------------------------
